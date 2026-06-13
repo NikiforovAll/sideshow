@@ -173,6 +173,8 @@ export function createApp({
     const fresh = await store.listComments({ sessionId, afterSeq: session.agentSeq });
     if (fresh.length === 0) return undefined;
     await store.markAgentSeen(sessionId, fresh[fresh.length - 1].seq);
+    // the cursor moved — viewers re-read sessions so read receipts flip live
+    bus.broadcast({ type: "session-updated", id: sessionId });
     const feedback = fresh.filter((cm) => cm.author === "user");
     return feedback.length > 0 ? feedback.map(feedbackView) : undefined;
   }
@@ -318,6 +320,7 @@ export function createApp({
     // author) — what it receives here should not be re-delivered as piggyback.
     if (q.author === "user" && q.sessionId && comments.length > 0) {
       await store.markAgentSeen(q.sessionId, lastSeq);
+      bus.broadcast({ type: "session-updated", id: q.sessionId });
     }
     return { comments, lastSeq };
   }

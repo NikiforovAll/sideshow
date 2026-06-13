@@ -118,11 +118,28 @@ function Thread(props: {
   send: (text: string) => Promise<string | null>;
 }) {
   const list = () => comments().filter((c) => c.snippetId === props.snippetId);
+  // Read receipt under the latest comment, when it's a confirmed user
+  // comment: the agent cursor (session.agentSeq) is the proof of delivery —
+  // every channel advances it, so "received" is fact, not heuristic. Older
+  // comments need no status of their own; the cursor is ordered.
+  const receipt = () => {
+    const last = list().at(-1);
+    if (!last || last.author !== "user" || last.pending) return null;
+    const seen = sessions.find((s) => s.id === selected())?.agentSeq ?? 0;
+    return last.seq <= seen ? "received" : "posted";
+  };
   return (
     <div class="thread">
       <div class="cmts">
         <For each={list()}>{(c) => <CommentRow comment={c} />}</For>
       </div>
+      <Show when={receipt()} keyed>
+        {(state) => (
+          <div class="receipt" classList={{ seen: state === "received" }}>
+            {state === "received" ? "received by agent" : "posted — agent hasn't picked it up yet"}
+          </div>
+        )}
+      </Show>
       <Composer placeholder={props.placeholder} send={props.send} />
     </div>
   );

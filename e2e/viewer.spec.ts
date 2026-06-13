@@ -142,6 +142,30 @@ test("the composer shows when an agent is listening for feedback", async ({ page
   await expect(card.locator(".composer .listening")).toBeHidden({ timeout: 10_000 });
 });
 
+test("a comment shows a read receipt that flips live when the agent collects it", async ({
+  page,
+  server,
+}) => {
+  const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
+
+  await page.goto(server.url);
+  const card = page.locator(".card:not(#sessionThread)");
+  const input = card.locator(".composer input");
+  await input.fill("make it pop");
+  await input.press("Enter");
+
+  // nothing has collected it yet
+  const receipt = card.locator(".receipt");
+  await expect(receipt).toHaveText("posted — agent hasn't picked it up yet");
+
+  // the agent picks it up (any author=user read advances the cursor)...
+  await fetch(`${server.url}/api/comments?session=${snippet.sessionId}&author=user`);
+
+  // ...and the receipt flips without a reload, via the session-updated event
+  await expect(receipt).toHaveText("received by agent");
+  await expect(receipt).toHaveClass(/seen/);
+});
+
 test("a failed comment send restores the input instead of losing the message", async ({
   page,
   server,
