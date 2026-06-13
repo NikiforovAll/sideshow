@@ -411,6 +411,7 @@ iframe {
   border-radius: 8px;
   padding: 0 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .composer button:hover {
   color: var(--text);

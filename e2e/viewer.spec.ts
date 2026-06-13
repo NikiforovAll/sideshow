@@ -86,6 +86,36 @@ test("session thread shows snippet-less comments and messages the agent", async 
   await expect(page.locator("#stream > .card")).toHaveCount(3);
 });
 
+test("send & copy posts the comment and puts a paste block on the clipboard", async ({
+  page,
+  server,
+  context,
+  browserName,
+}) => {
+  const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
+  // only chromium lets tests grant clipboard access; the other engines still
+  // exercise the post + toast path
+  if (browserName === "chromium") {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  }
+
+  await page.goto(server.url);
+  const card = page.locator(".card:not(#sessionThread)");
+  const input = card.locator(".composer input");
+  await input.fill("tighten the spacing");
+  await card.getByRole("button", { name: "Send & copy" }).click();
+
+  // the comment still lands in the thread like a normal send
+  await expect(card.locator(".cmt .txt")).toHaveText("tighten the spacing");
+  await expect(page.locator("#toast")).toContainText("Copied");
+
+  if (browserName === "chromium") {
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `sideshow feedback on “Doc” (snippet ${snippet.id}):\n“tighten the spacing”`,
+    );
+  }
+});
+
 test("a failed comment send restores the input instead of losing the message", async ({
   page,
   server,

@@ -13,6 +13,10 @@ All notable user-visible changes to this project are documented in this file.
   lives server-side at `/api/version` (npm registry + GitHub release notes),
   is cached for six hours, and fails silently — offline costs nothing but the
   absence of the notice.
+- A "Send & copy" button in every comment composer: posting also puts an
+  agent-ready paste block on the clipboard (snippet title + id + the comment),
+  for handing feedback straight to a terminal agent that isn't watching the
+  feedback channel. The comment still lands in the thread either way.
 
 ## [0.3.0] - 2026-06-12
 

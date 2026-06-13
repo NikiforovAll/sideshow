@@ -1,10 +1,11 @@
 import { For, onCleanup, onMount, Show } from "solid-js";
-import { api, relTime, type Snippet } from "./api.ts";
+import { api, relTime, sessionLabel, type Snippet } from "./api.ts";
 import {
   comments,
   scrollTarget,
   selected,
   sendComment,
+  sessions,
   setScrollTarget,
   toast,
   type ViewComment,
@@ -87,6 +88,9 @@ export function Card(props: { snippet: Snippet }) {
         send={(text) =>
           sendComment({ snippet: props.snippet.id, text, author: "user" }, props.snippet.id, text)
         }
+        copyBlock={(text) =>
+          `sideshow feedback on “${props.snippet.title}” (snippet ${props.snippet.id}):\n“${text}”`
+        }
       />
     </div>
   );
@@ -106,6 +110,10 @@ export function SessionThread() {
         snippetId={null}
         placeholder="Message the agent…"
         send={(text) => sendComment({ session: selected(), text, author: "user" }, null, text)}
+        copyBlock={(text) => {
+          const s = sessions.find((x) => x.id === selected());
+          return `sideshow feedback, session “${s ? sessionLabel(s) : selected()}”:\n“${text}”`;
+        }}
       />
     </div>
   );
@@ -115,6 +123,7 @@ function Thread(props: {
   snippetId: string | null;
   placeholder: string;
   send: (text: string) => Promise<string | null>;
+  copyBlock: (text: string) => string;
 }) {
   const list = () => comments().filter((c) => c.snippetId === props.snippetId);
   return (
@@ -122,7 +131,7 @@ function Thread(props: {
       <div class="cmts">
         <For each={list()}>{(c) => <CommentRow comment={c} />}</For>
       </div>
-      <Composer placeholder={props.placeholder} send={props.send} />
+      <Composer placeholder={props.placeholder} send={props.send} copyBlock={props.copyBlock} />
     </div>
   );
 }
@@ -141,7 +150,11 @@ function CommentRow(props: { comment: ViewComment }) {
   );
 }
 
-function Composer(props: { placeholder: string; send: (text: string) => Promise<string | null> }) {
+function Composer(props: {
+  placeholder: string;
+  send: (text: string) => Promise<string | null>;
+  copyBlock: (text: string) => string;
+}) {
   let input!: HTMLInputElement;
   const send = async () => {
     const text = input.value.trim();
@@ -155,6 +168,20 @@ function Composer(props: { placeholder: string; send: (text: string) => Promise<
       toast(`Couldn't send — ${error}. Your message is back in the box.`);
     }
   };
+  // Post the comment and also put an agent-ready paste block on the
+  // clipboard, for agents not watching the feedback channel. The clipboard
+  // write must start inside the click gesture or Safari rejects it.
+  const sendAndCopy = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(props.copyBlock(text));
+      toast("Copied — paste it to your agent");
+    } catch {
+      toast("Couldn't copy to clipboard — sending anyway");
+    }
+    await send();
+  };
   return (
     <div class="composer">
       <input
@@ -164,6 +191,9 @@ function Composer(props: { placeholder: string; send: (text: string) => Promise<
           if (e.key === "Enter") send();
         }}
       />
+      <button onClick={sendAndCopy} title="Post the comment and copy it for pasting to your agent">
+        Send &amp; copy
+      </button>
       <button onClick={send}>Send</button>
     </div>
   );
