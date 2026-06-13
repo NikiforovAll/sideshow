@@ -19,9 +19,10 @@ All notable user-visible changes to this project are documented in this file.
 - A copy button on each posted comment puts an agent-ready paste block on the
   clipboard (snippet title + id + the comment), for handing feedback straight
   to a terminal agent that isn't watching the feedback channel.
-- Read receipts: each thread shows whether its latest comment has actually
-  reached the agent ("posted" vs "received by agent"), derived from the
-  delivery cursor and flipped live the moment any channel collects it.
+- Read receipts: the latest comment in each thread carries a delivery
+  checkmark — faded grey until the agent has it, green once collected —
+  derived from the delivery cursor and flipped live the moment any channel
+  picks it up.
 
 ## [0.3.0] - 2026-06-12
 

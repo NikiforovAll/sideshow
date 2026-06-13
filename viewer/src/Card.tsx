@@ -118,28 +118,24 @@ function Thread(props: {
   send: (text: string) => Promise<string | null>;
 }) {
   const list = () => comments().filter((c) => c.snippetId === props.snippetId);
-  // Read receipt under the latest comment, when it's a confirmed user
-  // comment: the agent cursor (session.agentSeq) is the proof of delivery —
-  // every channel advances it, so "received" is fact, not heuristic. Older
-  // comments need no status of their own; the cursor is ordered.
-  const receipt = () => {
+  // Delivery checkmark, on the latest confirmed user comment only: the agent
+  // cursor (session.agentSeq) is the proof of delivery — every channel
+  // advances it, so a green tick is fact, not heuristic. Older comments need
+  // no tick of their own; the cursor is ordered, so anything below the latest
+  // ack is necessarily acked too.
+  const receiptId = () => {
     const last = list().at(-1);
-    if (!last || last.author !== "user" || last.pending) return null;
-    const seen = sessions.find((s) => s.id === selected())?.agentSeq ?? 0;
-    return last.seq <= seen ? "received" : "posted";
+    return last && last.author === "user" && !last.pending ? last.id : null;
   };
+  const acked = (c: ViewComment) =>
+    c.seq <= (sessions.find((s) => s.id === selected())?.agentSeq ?? 0);
   return (
     <div class="thread">
       <div class="cmts">
-        <For each={list()}>{(c) => <CommentRow comment={c} />}</For>
+        <For each={list()}>
+          {(c) => <CommentRow comment={c} receipt={c.id === receiptId()} acked={acked(c)} />}
+        </For>
       </div>
-      <Show when={receipt()} keyed>
-        {(state) => (
-          <div class="receipt" classList={{ seen: state === "received" }}>
-            {state === "received" ? "received by agent" : "posted — agent hasn't picked it up yet"}
-          </div>
-        )}
-      </Show>
       <Composer placeholder={props.placeholder} send={props.send} />
     </div>
   );
@@ -155,7 +151,7 @@ function pasteBlock(c: ViewComment): string {
   return `sideshow feedback, session “${s ? sessionLabel(s) : c.sessionId}”:\n“${c.text}”`;
 }
 
-function CommentRow(props: { comment: ViewComment }) {
+function CommentRow(props: { comment: ViewComment; receipt?: boolean; acked?: boolean }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(pasteBlock(props.comment));
@@ -164,6 +160,7 @@ function CommentRow(props: { comment: ViewComment }) {
       toast("Couldn't copy to clipboard");
     }
   };
+  const isUser = () => props.comment.author === "user" && !props.comment.pending;
   return (
     <div
       class="cmt"
@@ -172,10 +169,19 @@ function CommentRow(props: { comment: ViewComment }) {
     >
       <span class="who">{props.comment.author === "user" ? "you" : props.comment.author}</span>
       <span class="txt">{props.comment.text}</span>
-      <Show when={props.comment.author === "user" && !props.comment.pending}>
+      <Show when={isUser()}>
         <button class="copy" title="Copy for pasting to your agent" onClick={copy}>
           ⧉
         </button>
+      </Show>
+      <Show when={isUser() && props.receipt}>
+        <span
+          class="tick"
+          classList={{ acked: props.acked }}
+          title={props.acked ? "Received by the agent" : "Posted — not yet delivered to the agent"}
+        >
+          ✓
+        </span>
       </Show>
       <span class="when">{relTime(props.comment.createdAt)}</span>
     </div>

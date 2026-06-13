@@ -450,14 +450,17 @@ iframe {
 .cmt.pending {
   opacity: 0.55;
 }
-.receipt {
-  text-align: right;
-  font-size: 11px;
+.cmt .tick {
+  flex: none;
+  align-self: center;
+  font-size: 12px;
+  line-height: 1;
   color: var(--faint);
-  margin: -2px 0 6px;
+  opacity: 0.5;
 }
-.receipt.seen {
+.cmt .tick.acked {
   color: var(--ok);
+  opacity: 1;
 }
 #newPill {
   position: fixed;
@@ -641,9 +644,6 @@ iframe {
 /* narrow or touch: hover-revealed actions must stay reachable */
 @media (max-width: 700px), (hover: none) {
   .card-head .act {
-    opacity: 1;
-  }
-  .cmt .copy {
     opacity: 1;
   }
   .sess .x {

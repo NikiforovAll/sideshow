@@ -142,7 +142,7 @@ test("the composer shows when an agent is listening for feedback", async ({ page
   await expect(card.locator(".composer .listening")).toBeHidden({ timeout: 10_000 });
 });
 
-test("a comment shows a read receipt that flips live when the agent collects it", async ({
+test("a comment's delivery checkmark turns green live when the agent collects it", async ({
   page,
   server,
 }) => {
@@ -154,16 +154,16 @@ test("a comment shows a read receipt that flips live when the agent collects it"
   await input.fill("make it pop");
   await input.press("Enter");
 
-  // nothing has collected it yet
-  const receipt = card.locator(".receipt");
-  await expect(receipt).toHaveText("posted — agent hasn't picked it up yet");
+  // the checkmark shows on the comment but is not yet acked (faded grey)
+  const tick = card.locator(".cmt .tick");
+  await expect(tick).toBeVisible();
+  await expect(tick).not.toHaveClass(/acked/);
 
   // the agent picks it up (any author=user read advances the cursor)...
   await fetch(`${server.url}/api/comments?session=${snippet.sessionId}&author=user`);
 
-  // ...and the receipt flips without a reload, via the session-updated event
-  await expect(receipt).toHaveText("received by agent");
-  await expect(receipt).toHaveClass(/seen/);
+  // ...and the checkmark turns green without a reload, via session-updated
+  await expect(tick).toHaveClass(/acked/);
 });
 
 test("a failed comment send restores the input instead of losing the message", async ({
