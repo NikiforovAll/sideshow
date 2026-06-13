@@ -10,6 +10,7 @@
   --accent: #185fa5;
   --accent-bg: #e6f1fb;
   --hover: rgba(20, 20, 10, 0.05);
+  --ok: #2e7d4f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -24,6 +25,7 @@
     --accent: #85b7eb;
     --accent-bg: rgba(55, 138, 221, 0.16);
     --hover: rgba(255, 255, 250, 0.06);
+    --ok: #7fc796;
   }
 }
 * {
@@ -382,6 +384,26 @@ iframe {
   color: var(--faint);
   align-self: center;
 }
+.cmt .copy {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cmt:hover .copy,
+.cmt .copy:focus-visible {
+  opacity: 1;
+}
+.cmt .copy:hover {
+  color: var(--text);
+  background: var(--hover);
+}
 .composer {
   display: flex;
   gap: 8px;
@@ -416,6 +438,14 @@ iframe {
 .composer button:hover {
   color: var(--text);
   background: var(--hover);
+}
+.composer .listening {
+  flex: none;
+  align-self: center;
+  font-size: 11px;
+  color: var(--ok);
+  white-space: nowrap;
+  cursor: default;
 }
 .cmt.pending {
   opacity: 0.55;
@@ -602,6 +632,9 @@ iframe {
 /* narrow or touch: hover-revealed actions must stay reachable */
 @media (max-width: 700px), (hover: none) {
   .card-head .act {
+    opacity: 1;
+  }
+  .cmt .copy {
     opacity: 1;
   }
   .sess .x {

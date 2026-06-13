@@ -86,7 +86,7 @@ test("session thread shows snippet-less comments and messages the agent", async 
   await expect(page.locator("#stream > .card")).toHaveCount(3);
 });
 
-test("send & copy posts the comment and puts a paste block on the clipboard", async ({
+test("a comment's copy button puts an agent-ready paste block on the clipboard", async ({
   page,
   server,
   context,
@@ -94,7 +94,7 @@ test("send & copy posts the comment and puts a paste block on the clipboard", as
 }) => {
   const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
   // only chromium lets tests grant clipboard access; the other engines still
-  // exercise the post + toast path
+  // exercise the button + toast path
   if (browserName === "chromium") {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   }
@@ -103,17 +103,43 @@ test("send & copy posts the comment and puts a paste block on the clipboard", as
   const card = page.locator(".card:not(#sessionThread)");
   const input = card.locator(".composer input");
   await input.fill("tighten the spacing");
-  await card.getByRole("button", { name: "Send & copy" }).click();
+  await input.press("Enter");
 
-  // the comment still lands in the thread like a normal send
-  await expect(card.locator(".cmt .txt")).toHaveText("tighten the spacing");
+  // the copy button appears only once the comment is confirmed (not pending)
+  const cmt = card.locator(".cmt");
+  await expect(cmt).not.toHaveClass(/pending/);
+  await cmt.hover();
+  await cmt.locator(".copy").click();
+
   await expect(page.locator("#toast")).toContainText("Copied");
-
   if (browserName === "chromium") {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       `sideshow feedback on “Doc” (snippet ${snippet.id}):\n“tighten the spacing”`,
     );
   }
+});
+
+test("the composer shows when an agent is listening for feedback", async ({ page, server }) => {
+  const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
+
+  await page.goto(server.url);
+  const card = page.locator(".card:not(#sessionThread)");
+  await expect(card.locator(".composer .listening")).toBeHidden();
+
+  // an agent arms a feedback wait (sideshow wait / MCP wait_for_feedback)
+  const wait = fetch(
+    `${server.url}/api/comments?session=${snippet.sessionId}&author=user&wait=4`,
+  ).then((r) => r.json() as Promise<{ comments: { text: string }[] }>);
+  await expect(card.locator(".composer .listening")).toBeVisible();
+
+  // a post resolves the wait — the agent receives it immediately
+  const input = card.locator(".composer input");
+  await input.fill("looks good");
+  await card.getByRole("button", { name: "Post" }).click();
+  expect((await wait).comments.map((c) => c.text)).toContain("looks good");
+
+  // after the grace window the indicator goes away
+  await expect(card.locator(".composer .listening")).toBeHidden({ timeout: 10_000 });
 });
 
 test("a failed comment send restores the input instead of losing the message", async ({

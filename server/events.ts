@@ -1,5 +1,8 @@
 export type FeedEvent =
   | { type: "session-created" | "session-updated" | "session-deleted"; id: string }
+  // an agent opened or dropped a feedback wait on the session — runtime
+  // state, so the viewer refetches sessions rather than trusting a payload
+  | { type: "session-listening"; id: string }
   | { type: "snippet-created" | "snippet-updated"; id: string; sessionId: string; version: number }
   | { type: "snippet-deleted"; id: string; sessionId: string }
   | {

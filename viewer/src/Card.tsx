@@ -88,9 +88,6 @@ export function Card(props: { snippet: Snippet }) {
         send={(text) =>
           sendComment({ snippet: props.snippet.id, text, author: "user" }, props.snippet.id, text)
         }
-        copyBlock={(text) =>
-          `sideshow feedback on “${props.snippet.title}” (snippet ${props.snippet.id}):\n“${text}”`
-        }
       />
     </div>
   );
@@ -110,10 +107,6 @@ export function SessionThread() {
         snippetId={null}
         placeholder="Message the agent…"
         send={(text) => sendComment({ session: selected(), text, author: "user" }, null, text)}
-        copyBlock={(text) => {
-          const s = sessions.find((x) => x.id === selected());
-          return `sideshow feedback, session “${s ? sessionLabel(s) : selected()}”:\n“${text}”`;
-        }}
       />
     </div>
   );
@@ -123,7 +116,6 @@ function Thread(props: {
   snippetId: string | null;
   placeholder: string;
   send: (text: string) => Promise<string | null>;
-  copyBlock: (text: string) => string;
 }) {
   const list = () => comments().filter((c) => c.snippetId === props.snippetId);
   return (
@@ -131,12 +123,30 @@ function Thread(props: {
       <div class="cmts">
         <For each={list()}>{(c) => <CommentRow comment={c} />}</For>
       </div>
-      <Composer placeholder={props.placeholder} send={props.send} copyBlock={props.copyBlock} />
+      <Composer placeholder={props.placeholder} send={props.send} />
     </div>
   );
 }
 
+// The paste block a copied comment puts on the clipboard — enough context
+// for an agent that wasn't watching the feedback channel.
+function pasteBlock(c: ViewComment): string {
+  if (c.snippetId) {
+    return `sideshow feedback on “${c.snippetTitle ?? "a snippet"}” (snippet ${c.snippetId}):\n“${c.text}”`;
+  }
+  const s = sessions.find((x) => x.id === c.sessionId);
+  return `sideshow feedback, session “${s ? sessionLabel(s) : c.sessionId}”:\n“${c.text}”`;
+}
+
 function CommentRow(props: { comment: ViewComment }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(pasteBlock(props.comment));
+      toast("Copied — paste it to your agent");
+    } catch {
+      toast("Couldn't copy to clipboard");
+    }
+  };
   return (
     <div
       class="cmt"
@@ -145,17 +155,22 @@ function CommentRow(props: { comment: ViewComment }) {
     >
       <span class="who">{props.comment.author === "user" ? "you" : props.comment.author}</span>
       <span class="txt">{props.comment.text}</span>
+      <Show when={props.comment.author === "user" && !props.comment.pending}>
+        <button class="copy" title="Copy for pasting to your agent" onClick={copy}>
+          ⧉
+        </button>
+      </Show>
       <span class="when">{relTime(props.comment.createdAt)}</span>
     </div>
   );
 }
 
-function Composer(props: {
-  placeholder: string;
-  send: (text: string) => Promise<string | null>;
-  copyBlock: (text: string) => string;
-}) {
+function Composer(props: { placeholder: string; send: (text: string) => Promise<string | null> }) {
   let input!: HTMLInputElement;
+  // An agent with a feedback wait open sees a post immediately; otherwise it
+  // gets it on its next sideshow call — or paste it via a comment's copy
+  // button. The flag is session-wide, refreshed by session-listening events.
+  const listening = () => sessions.find((s) => s.id === selected())?.agentListening ?? false;
   const send = async () => {
     const text = input.value.trim();
     if (!text) return;
@@ -168,22 +183,16 @@ function Composer(props: {
       toast(`Couldn't send — ${error}. Your message is back in the box.`);
     }
   };
-  // Post the comment and also put an agent-ready paste block on the
-  // clipboard, for agents not watching the feedback channel. The clipboard
-  // write must start inside the click gesture or Safari rejects it.
-  const sendAndCopy = async () => {
-    const text = input.value.trim();
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(props.copyBlock(text));
-      toast("Copied — paste it to your agent");
-    } catch {
-      toast("Couldn't copy to clipboard — sending anyway");
-    }
-    await send();
-  };
   return (
     <div class="composer">
+      <Show when={listening()}>
+        <span
+          class="listening"
+          title="An agent is waiting for feedback — posts are seen immediately"
+        >
+          ● listening
+        </span>
+      </Show>
       <input
         ref={(el) => (input = el)}
         placeholder={props.placeholder}
@@ -191,10 +200,7 @@ function Composer(props: {
           if (e.key === "Enter") send();
         }}
       />
-      <button onClick={sendAndCopy} title="Post the comment and copy it for pasting to your agent">
-        Send &amp; copy
-      </button>
-      <button onClick={send}>Send</button>
+      <button onClick={send}>Post</button>
     </div>
   );
 }
