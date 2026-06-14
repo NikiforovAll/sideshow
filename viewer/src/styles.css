@@ -10,7 +10,6 @@
   --accent: #185fa5;
   --accent-bg: #e6f1fb;
   --hover: rgba(20, 20, 10, 0.05);
-  --ok: #2e7d4f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -25,7 +24,6 @@
     --accent: #85b7eb;
     --accent-bg: rgba(55, 138, 221, 0.16);
     --hover: rgba(255, 255, 250, 0.06);
-    --ok: #7fc796;
   }
 }
 * {
@@ -439,28 +437,8 @@ iframe {
   color: var(--text);
   background: var(--hover);
 }
-.composer .listening {
-  flex: none;
-  align-self: center;
-  font-size: 11px;
-  color: var(--ok);
-  white-space: nowrap;
-  cursor: default;
-}
 .cmt.pending {
   opacity: 0.55;
-}
-.cmt .tick {
-  flex: none;
-  align-self: center;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--faint);
-  opacity: 0.5;
-}
-.cmt .tick.acked {
-  color: var(--ok);
-  opacity: 1;
 }
 #newPill {
   position: fixed;

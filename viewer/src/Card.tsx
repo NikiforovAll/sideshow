@@ -84,7 +84,7 @@ export function Card(props: { snippet: Snippet }) {
       ></iframe>
       <Thread
         snippetId={props.snippet.id}
-        placeholder="Reply to the agent…"
+        placeholder="Leave a comment…"
         send={(text) =>
           sendComment({ snippet: props.snippet.id, text, author: "user" }, props.snippet.id, text)
         }
@@ -95,7 +95,7 @@ export function Card(props: { snippet: Snippet }) {
 
 // Comments without a snippet (e.g. `sideshow comment` with no --snippet)
 // live in a session-level thread at the bottom of the stream, which also
-// lets the user message the agent without picking a snippet.
+// lets the user leave a comment without picking a snippet.
 export function SessionThread() {
   return (
     <div class="card" id="sessionThread">
@@ -105,7 +105,7 @@ export function SessionThread() {
       </div>
       <Thread
         snippetId={null}
-        placeholder="Message the agent…"
+        placeholder="Leave a comment…"
         send={(text) => sendComment({ session: selected(), text, author: "user" }, null, text)}
       />
     </div>
@@ -118,23 +118,10 @@ function Thread(props: {
   send: (text: string) => Promise<string | null>;
 }) {
   const list = () => comments().filter((c) => c.snippetId === props.snippetId);
-  // Delivery checkmark, on the latest confirmed user comment only: the agent
-  // cursor (session.agentSeq) is the proof of delivery — every channel
-  // advances it, so a green tick is fact, not heuristic. Older comments need
-  // no tick of their own; the cursor is ordered, so anything below the latest
-  // ack is necessarily acked too.
-  const receiptId = () => {
-    const last = list().at(-1);
-    return last && last.author === "user" && !last.pending ? last.id : null;
-  };
-  const acked = (c: ViewComment) =>
-    c.seq <= (sessions.find((s) => s.id === selected())?.agentSeq ?? 0);
   return (
     <div class="thread">
       <div class="cmts">
-        <For each={list()}>
-          {(c) => <CommentRow comment={c} receipt={c.id === receiptId()} acked={acked(c)} />}
-        </For>
+        <For each={list()}>{(c) => <CommentRow comment={c} />}</For>
       </div>
       <Composer placeholder={props.placeholder} send={props.send} />
     </div>
@@ -142,16 +129,16 @@ function Thread(props: {
 }
 
 // The paste block a copied comment puts on the clipboard — enough context
-// for an agent that wasn't watching the feedback channel.
+// for an agent to act on the comment when handed it directly.
 function pasteBlock(c: ViewComment): string {
   if (c.snippetId) {
-    return `sideshow feedback on “${c.snippetTitle ?? "a snippet"}” (snippet ${c.snippetId}):\n“${c.text}”`;
+    return `sideshow comment on “${c.snippetTitle ?? "a snippet"}” (snippet ${c.snippetId}):\n“${c.text}”`;
   }
   const s = sessions.find((x) => x.id === c.sessionId);
-  return `sideshow feedback, session “${s ? sessionLabel(s) : c.sessionId}”:\n“${c.text}”`;
+  return `sideshow comment, session “${s ? sessionLabel(s) : c.sessionId}”:\n“${c.text}”`;
 }
 
-function CommentRow(props: { comment: ViewComment; receipt?: boolean; acked?: boolean }) {
+function CommentRow(props: { comment: ViewComment }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(pasteBlock(props.comment));
@@ -174,15 +161,6 @@ function CommentRow(props: { comment: ViewComment; receipt?: boolean; acked?: bo
           ⧉
         </button>
       </Show>
-      <Show when={isUser() && props.receipt}>
-        <span
-          class="tick"
-          classList={{ acked: props.acked }}
-          title={props.acked ? "Received by the agent" : "Posted — not yet delivered to the agent"}
-        >
-          ✓
-        </span>
-      </Show>
       <span class="when">{relTime(props.comment.createdAt)}</span>
     </div>
   );
@@ -190,10 +168,6 @@ function CommentRow(props: { comment: ViewComment; receipt?: boolean; acked?: bo
 
 function Composer(props: { placeholder: string; send: (text: string) => Promise<string | null> }) {
   let input!: HTMLInputElement;
-  // An agent with a feedback wait open sees a post immediately; otherwise it
-  // gets it on its next sideshow call — or paste it via a comment's copy
-  // button. The flag is session-wide, refreshed by session-listening events.
-  const listening = () => sessions.find((s) => s.id === selected())?.agentListening ?? false;
   const send = async () => {
     const text = input.value.trim();
     if (!text) return;
@@ -203,19 +177,11 @@ function Composer(props: { placeholder: string; send: (text: string) => Promise<
     if (error !== null) {
       if (!input.value) input.value = text;
       input.focus();
-      toast(`Couldn't send — ${error}. Your message is back in the box.`);
+      toast(`Couldn't post that comment — ${error}. It's back in the box.`);
     }
   };
   return (
     <div class="composer">
-      <Show when={listening()}>
-        <span
-          class="listening"
-          title="An agent is waiting for feedback — posts are seen immediately"
-        >
-          ● listening
-        </span>
-      </Show>
       <input
         ref={(el) => (input = el)}
         placeholder={props.placeholder}
@@ -223,7 +189,7 @@ function Composer(props: { placeholder: string; send: (text: string) => Promise<
           if (e.key === "Enter") send();
         }}
       />
-      <button onClick={send}>Post</button>
+      <button onClick={send}>Comment</button>
     </div>
   );
 }

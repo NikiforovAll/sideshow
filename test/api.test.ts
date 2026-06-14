@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { createApp } from "../server/app.ts";
 import { JsonFileStore } from "../server/storage.ts";
 
-function makeApp(authToken?: string, options?: { listenGraceMs?: number }) {
+function makeApp(authToken?: string) {
   const dir = mkdtempSync(join(tmpdir(), "sideshow-test-"));
   const store = new JsonFileStore(join(dir, "data.json"));
   return createApp({
@@ -15,7 +15,6 @@ function makeApp(authToken?: string, options?: { listenGraceMs?: number }) {
     guideMarkdown: "# guide",
     setupText: "# setup",
     authToken,
-    ...options,
   });
 }
 
@@ -543,66 +542,4 @@ test("rejects empty and oversized html", async () => {
     (await app.request("/api/snippets", json({ html: "x".repeat(2 * 1024 * 1024 + 1) }))).status,
     413,
   );
-});
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function listening(app: ReturnType<typeof makeApp>, sessionId: string): Promise<boolean> {
-  const sessions = (await (await app.request("/api/sessions")).json()) as any;
-  return sessions.find((s: any) => s.id === sessionId).agentListening;
-}
-
-test("an open feedback wait marks the session listening, with a grace period", async () => {
-  const app = makeApp(undefined, { listenGraceMs: 60 });
-  const snippet = (await (
-    await app.request("/api/snippets", json({ html: "<p>x</p>", agent: "pi" }))
-  ).json()) as any;
-  assert.equal(await listening(app, snippet.sessionId), false);
-
-  const wait = app.request(`/api/comments?session=${snippet.sessionId}&author=user&wait=5`);
-  for (let i = 0; i < 50 && !(await listening(app, snippet.sessionId)); i++) await sleep(10);
-  assert.equal(await listening(app, snippet.sessionId), true);
-
-  await app.request("/api/comments", json({ snippet: snippet.id, text: "hi", author: "user" }));
-  const result = (await (await wait).json()) as any;
-  assert.deepEqual(
-    result.comments.map((c: any) => c.text),
-    ["hi"],
-  );
-  // still listening within the grace window, silent after it expires
-  assert.equal(await listening(app, snippet.sessionId), true);
-  await sleep(120);
-  assert.equal(await listening(app, snippet.sessionId), false);
-});
-
-test("a re-armed wait inside the grace window keeps the session listening", async () => {
-  const app = makeApp(undefined, { listenGraceMs: 200 });
-  const snippet = (await (
-    await app.request("/api/snippets", json({ html: "<p>x</p>", agent: "pi" }))
-  ).json()) as any;
-
-  const first = app.request(`/api/comments?session=${snippet.sessionId}&author=user&wait=5`);
-  for (let i = 0; i < 50 && !(await listening(app, snippet.sessionId)); i++) await sleep(10);
-  await app.request("/api/comments", json({ snippet: snippet.id, text: "one", author: "user" }));
-  await first;
-
-  const second = app.request(`/api/comments?session=${snippet.sessionId}&author=user&wait=5`);
-  await sleep(50); // inside the first wait's grace window
-  assert.equal(await listening(app, snippet.sessionId), true);
-  await app.request("/api/comments", json({ snippet: snippet.id, text: "two", author: "user" }));
-  await second;
-});
-
-test("viewer reads never count as listening", async () => {
-  const app = makeApp(undefined, { listenGraceMs: 60 });
-  const snippet = (await (
-    await app.request("/api/snippets", json({ html: "<p>x</p>", agent: "pi" }))
-  ).json()) as any;
-
-  // unfiltered long-poll, like the viewer's — author is absent
-  const viewerPoll = app.request(`/api/comments?session=${snippet.sessionId}&wait=2`);
-  await sleep(50);
-  assert.equal(await listening(app, snippet.sessionId), false);
-  await app.request("/api/comments", json({ snippet: snippet.id, text: "hi", author: "user" }));
-  await viewerPoll;
 });

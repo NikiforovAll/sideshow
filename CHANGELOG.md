@@ -13,16 +13,16 @@ All notable user-visible changes to this project are documented in this file.
   lives server-side at `/api/version` (npm registry + GitHub release notes),
   is cached for six hours, and fails silently — offline costs nothing but the
   absence of the notice.
-- The composer shows when an agent is listening: an open feedback wait
-  (`sideshow wait`, MCP `wait_for_feedback`) lights a "● listening" indicator,
-  so the user knows a post will be seen immediately rather than guessing.
 - A copy button on each posted comment puts an agent-ready paste block on the
-  clipboard (snippet title + id + the comment), for handing feedback straight
-  to a terminal agent that isn't watching the feedback channel.
-- Read receipts: the latest comment in each thread carries a delivery
-  checkmark — faded grey until the agent has it, green once collected —
-  derived from the delivery cursor and flipped live the moment any channel
-  picks it up.
+  clipboard (snippet title + id + the comment), for handing a comment straight
+  to a terminal agent.
+
+### Changed
+
+- The viewer is framed around leaving comments rather than messaging an agent:
+  composers read "Leave a comment…" with a "Comment" button. No delivery
+  receipts or "listening" indicators — a comment is an annotation the agent
+  picks up through the feedback loop, not a synchronous message.
 
 ## [0.3.0] - 2026-06-12
 

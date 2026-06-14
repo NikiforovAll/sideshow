@@ -27,9 +27,6 @@ export interface AppOptions {
   upgradeCommand?: string;
   // Test seam: replaces the npm-registry/GitHub lookup for the latest release.
   fetchLatestRelease?: () => Promise<LatestRelease | null>;
-  // How long a session still counts as listened-to after its last feedback
-  // wait drops, so re-armed polls don't flicker the viewer's indicator.
-  listenGraceMs?: number;
 }
 
 export interface LatestRelease {
@@ -111,45 +108,9 @@ export function createApp({
   version,
   upgradeCommand,
   fetchLatestRelease,
-  listenGraceMs = 3000,
 }: AppOptions) {
   const app = new Hono();
   const bus = new EventBus();
-
-  // Which sessions have an agent blocked in a feedback wait right now, so the
-  // viewer can tell the user their comment will be seen immediately. Runtime
-  // state by design — a crashed waiter must not leave a session looking
-  // listened-to. The grace timer bridges the gap between re-armed polls.
-  const listenCounts = new Map<string, number>();
-  const listenGrace = new Map<string, ReturnType<typeof setTimeout>>();
-  const isListening = (sessionId: string) =>
-    (listenCounts.get(sessionId) ?? 0) > 0 || listenGrace.has(sessionId);
-  function startListening(sessionId: string) {
-    const grace = listenGrace.get(sessionId);
-    if (grace !== undefined) {
-      clearTimeout(grace);
-      listenGrace.delete(sessionId);
-    }
-    const count = (listenCounts.get(sessionId) ?? 0) + 1;
-    listenCounts.set(sessionId, count);
-    // within the grace window the session never observably stopped listening
-    if (count === 1 && grace === undefined) {
-      bus.broadcast({ type: "session-listening", id: sessionId });
-    }
-  }
-  function stopListening(sessionId: string) {
-    const count = (listenCounts.get(sessionId) ?? 0) - 1;
-    if (count > 0) {
-      listenCounts.set(sessionId, count);
-      return;
-    }
-    listenCounts.delete(sessionId);
-    const timer = setTimeout(() => {
-      listenGrace.delete(sessionId);
-      bus.broadcast({ type: "session-listening", id: sessionId });
-    }, listenGraceMs);
-    listenGrace.set(sessionId, timer);
-  }
 
   // Cached, fail-silent update lookup: being offline or rate-limited must
   // cost nothing but the absence of the notice. Failures are cached too, so
@@ -173,8 +134,6 @@ export function createApp({
     const fresh = await store.listComments({ sessionId, afterSeq: session.agentSeq });
     if (fresh.length === 0) return undefined;
     await store.markAgentSeen(sessionId, fresh[fresh.length - 1].seq);
-    // the cursor moved — viewers re-read sessions so read receipts flip live
-    bus.broadcast({ type: "session-updated", id: sessionId });
     const feedback = fresh.filter((cm) => cm.author === "user");
     return feedback.length > 0 ? feedback.map(feedbackView) : undefined;
   }
@@ -291,28 +250,20 @@ export function createApp({
 
     let comments = matches(await store.listComments(query));
     if (comments.length === 0 && wait > 0) {
-      // an open author=user wait is an agent listening for feedback — surface
-      // it so the viewer can tell the user a comment lands immediately
-      const listening = q.author === "user" && q.sessionId !== undefined;
-      if (listening) startListening(q.sessionId!);
-      try {
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(done, wait * 1000);
-          const unsubscribe = bus.subscribe((event) => {
-            if (event.type !== "comment-created") return;
-            if (q.sessionId && event.sessionId !== q.sessionId) return;
-            if (q.snippetId && event.snippetId !== q.snippetId) return;
-            done();
-          });
-          function done() {
-            clearTimeout(timer);
-            unsubscribe();
-            resolve();
-          }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(done, wait * 1000);
+        const unsubscribe = bus.subscribe((event) => {
+          if (event.type !== "comment-created") return;
+          if (q.sessionId && event.sessionId !== q.sessionId) return;
+          if (q.snippetId && event.snippetId !== q.snippetId) return;
+          done();
         });
-      } finally {
-        if (listening) stopListening(q.sessionId!);
-      }
+        function done() {
+          clearTimeout(timer);
+          unsubscribe();
+          resolve();
+        }
+      });
       comments = matches(await store.listComments(query));
     }
     const lastSeq = comments.length > 0 ? comments[comments.length - 1].seq : (afterSeq ?? 0);
@@ -320,7 +271,6 @@ export function createApp({
     // author) — what it receives here should not be re-delivered as piggyback.
     if (q.author === "user" && q.sessionId && comments.length > 0) {
       await store.markAgentSeen(q.sessionId, lastSeq);
-      bus.broadcast({ type: "session-updated", id: q.sessionId });
     }
     return { comments, lastSeq };
   }
@@ -367,13 +317,7 @@ export function createApp({
     const [sessions, snippets] = await Promise.all([store.listSessions(), store.listSnippets()]);
     const counts = new Map<string, number>();
     for (const s of snippets) counts.set(s.sessionId, (counts.get(s.sessionId) ?? 0) + 1);
-    return c.json(
-      sessions.map((s) => ({
-        ...s,
-        snippetCount: counts.get(s.id) ?? 0,
-        agentListening: isListening(s.id),
-      })),
-    );
+    return c.json(sessions.map((s) => ({ ...s, snippetCount: counts.get(s.id) ?? 0 })));
   });
 
   app.post("/api/sessions", async (c) => {

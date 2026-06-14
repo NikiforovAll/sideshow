@@ -3,11 +3,9 @@ import type { Comment, Session, Snippet } from "../../server/types.ts";
 
 export type { Comment, Session, Snippet };
 
-// GET /api/sessions decorates each session with its snippet count and
-// whether an agent currently has a feedback wait open on it.
+// GET /api/sessions decorates each session with its snippet count.
 export interface SessionRow extends Session {
   snippetCount: number;
-  agentListening: boolean;
 }
 
 // GET /api/version — upgradeCommand and notes are set only when an update

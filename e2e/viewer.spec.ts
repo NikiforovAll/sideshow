@@ -114,56 +114,9 @@ test("a comment's copy button puts an agent-ready paste block on the clipboard",
   await expect(page.locator("#toast")).toContainText("Copied");
   if (browserName === "chromium") {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `sideshow feedback on “Doc” (snippet ${snippet.id}):\n“tighten the spacing”`,
+      `sideshow comment on “Doc” (snippet ${snippet.id}):\n“tighten the spacing”`,
     );
   }
-});
-
-test("the composer shows when an agent is listening for feedback", async ({ page, server }) => {
-  const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
-
-  await page.goto(server.url);
-  const card = page.locator(".card:not(#sessionThread)");
-  await expect(card.locator(".composer .listening")).toBeHidden();
-
-  // an agent arms a feedback wait (sideshow wait / MCP wait_for_feedback)
-  const wait = fetch(
-    `${server.url}/api/comments?session=${snippet.sessionId}&author=user&wait=4`,
-  ).then((r) => r.json() as Promise<{ comments: { text: string }[] }>);
-  await expect(card.locator(".composer .listening")).toBeVisible();
-
-  // a post resolves the wait — the agent receives it immediately
-  const input = card.locator(".composer input");
-  await input.fill("looks good");
-  await card.getByRole("button", { name: "Post" }).click();
-  expect((await wait).comments.map((c) => c.text)).toContain("looks good");
-
-  // after the grace window the indicator goes away
-  await expect(card.locator(".composer .listening")).toBeHidden({ timeout: 10_000 });
-});
-
-test("a comment's delivery checkmark turns green live when the agent collects it", async ({
-  page,
-  server,
-}) => {
-  const snippet = await publish(server.url, { html: "<p>x</p>", title: "Doc", agent: "e2e" });
-
-  await page.goto(server.url);
-  const card = page.locator(".card:not(#sessionThread)");
-  const input = card.locator(".composer input");
-  await input.fill("make it pop");
-  await input.press("Enter");
-
-  // the checkmark shows on the comment but is not yet acked (faded grey)
-  const tick = card.locator(".cmt .tick");
-  await expect(tick).toBeVisible();
-  await expect(tick).not.toHaveClass(/acked/);
-
-  // the agent picks it up (any author=user read advances the cursor)...
-  await fetch(`${server.url}/api/comments?session=${snippet.sessionId}&author=user`);
-
-  // ...and the checkmark turns green without a reload, via session-updated
-  await expect(tick).toHaveClass(/acked/);
 });
 
 test("a failed comment send restores the input instead of losing the message", async ({
@@ -182,7 +135,7 @@ test("a failed comment send restores the input instead of losing the message", a
   await input.fill("important feedback");
   await input.press("Enter");
 
-  await expect(page.locator("#toast")).toContainText("Couldn't send");
+  await expect(page.locator("#toast")).toContainText("Couldn't post");
   await expect(input).toHaveValue("important feedback");
   await expect(card.locator(".cmt")).toHaveCount(0);
 
